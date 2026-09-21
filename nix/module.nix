@@ -86,6 +86,25 @@ let
       options = {
         package = mkPackageOption pkgs "zeroclaw" { };
 
+        webUiPackage = mkOption {
+          type = types.nullOr types.package;
+          # `or null` keeps plain-nixpkgs evaluation (where neither package
+          # exists yet) on the API-only path instead of failing. Flake users
+          # wire `webUiPackage = self.packages.${system}.zeroclaw-web`, or
+          # overlay `zeroclaw-web` into `pkgs` and inherit this default.
+          default = pkgs.zeroclaw-web or null;
+          defaultText = literalExpression "pkgs.zeroclaw-web";
+          example = literalExpression "pkgs.zeroclaw-web";
+          description = ''
+            Web dashboard bundle serving the gateway UI. When set, the module
+            defaults `settings.gateway.web_dist_dir` to
+            `''${webUiPackage}/share/zeroclaw-web` (the `static_files.rs`
+            bundle layout) unless `settings.gateway.web_dist_dir` is set
+            explicitly, which always wins. Set to `null` for API-only
+            instances with no dashboard.
+          '';
+        };
+
         user = mkOption {
           type = types.str;
           default = "zeroclaw-${name}";
@@ -244,10 +263,24 @@ let
   # contradictions) and isn't standard nixpkgs shape.
 
   # Render config.toml = formats.toml.generate settings (+ optional extraConfig).
+  # `gateway.web_dist_dir` is the canonical dashboard knob (see
+  # `crates/zeroclaw-config/src/schema.rs`); the module only supplies its
+  # default from `webUiPackage`. An explicit
+  # `settings.gateway.web_dist_dir` always wins, and `webUiPackage = null`
+  # leaves the key unset (API-only mode).
   renderConfigFile =
     name: instanceCfg:
     let
-      base = tomlFormat.generate "zeroclaw-${name}-config.toml" instanceCfg.settings;
+      effectiveSettings =
+        if instanceCfg.webUiPackage == null
+          || lib.hasAttrByPath [ "gateway" "web_dist_dir" ] instanceCfg.settings
+        then
+          instanceCfg.settings
+        else
+          lib.recursiveUpdate instanceCfg.settings {
+            gateway.web_dist_dir = "${instanceCfg.webUiPackage}/share/zeroclaw-web";
+          };
+      base = tomlFormat.generate "zeroclaw-${name}-config.toml" effectiveSettings;
     in
     if instanceCfg.extraConfig == "" then
       base

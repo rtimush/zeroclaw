@@ -71,6 +71,37 @@ After a `nixos-rebuild switch`:
 - `/var/lib/zeroclaw-me/config.toml` contains the rendered TOML, mode `0600`.
 - ZeroClaw is invoked as `${pkgs.zeroclaw}/bin/zeroclaw daemon`.
 
+## Web dashboard bundle
+
+The flake exposes the dashboard as `packages.zeroclaw-web` (built from
+`web/` via `nix/web.nix`: a pure-Rust `openapi-spec` derivation feeds the
+`buildNpmPackage` bundle, so the TypeScript client always matches the
+gateway's `build_spec()` contract). The module consumes it through
+`webUiPackage`:
+
+```nix
+{ config, pkgs, ... }: {
+  nixpkgs.overlays = [
+    (final: prev: {
+      zeroclaw-web = self.packages.${pkgs.system}.zeroclaw-web;
+    })
+  ];
+
+  services.zeroclaw.instances.me = {
+    # ... settings, environmentFile ...
+    webUiPackage = pkgs.zeroclaw-web; # default when overlaid; null = API-only
+  };
+}
+```
+
+When `webUiPackage` is set, the module defaults
+`settings.gateway.web_dist_dir` to
+`${webUiPackage}/share/zeroclaw-web`. An explicit
+`settings.gateway.web_dist_dir` always wins; `webUiPackage = null` leaves
+the key unset and the gateway runs API-only. The bundle lives in the
+world-readable `/nix/store` (no secrets), so no extra sandbox paths are
+needed.
+
 ## Multi-instance usage
 
 The module is `attrsOf submodule`-shaped, so multiple instances on one host
@@ -95,6 +126,7 @@ instance creates it and the others set `createUser = false`.
 | Option | Type | Default | Purpose |
 |---|---|---|---|
 | `package` | `package` | `pkgs.zeroclaw` (via `mkPackageOption`) | Override for out-of-tree builds. |
+| `webUiPackage` | `nullOr package` | `pkgs.zeroclaw-web` (or `null` without overlay) | Dashboard bundle. `null` = API-only. |
 | `user` | `str` | `"zeroclaw-<name>"` | System user. |
 | `group` | `str` | `"zeroclaw-<name>"` | System group. |
 | `createUser` | `bool` | `true` | Set `false` to bring your own user. |
