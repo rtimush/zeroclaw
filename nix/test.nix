@@ -39,6 +39,9 @@
 #      ending in `/share/zeroclaw-web` whose directory contains
 #      `index.html`, while the `other` instance (no bundle) renders no
 #      `gateway` section at all (API-only mode).
+#   10. A raw `[gateway]` table in the `test` instance's `extraConfig` merges
+#      with the bundle default into a single valid table (`gateway.port`
+#      renders alongside `gateway.web_dist_dir`).
 #
 # A no-op stub binary stands in for the real `zeroclaw daemon` so the test
 # does not depend on a working ZeroClaw build. The stub validates everything
@@ -103,6 +106,12 @@ in
             allowed_users = [ "12345" ];
           };
         };
+        # Raw `[gateway]` table merges with the bundle's injected
+        # `gateway.web_dist_dir` into a single valid table (no duplicate).
+        extraConfig = ''
+          [gateway]
+          port = 42618
+        '';
       };
 
       services.zeroclaw.instances.other = {
@@ -273,6 +282,15 @@ in
         ).strip()
         assert gateway == "null", (
             f"expected no gateway section, got {gateway!r}"
+        )
+
+    with subtest("extraConfig gateway table merges with the bundle default"):
+        port = machine.succeed(
+            "yq -p toml -o json '.gateway.port' "
+            "/var/lib/zeroclaw-test/config.toml"
+        ).strip().strip('"')
+        assert port == "42618", (
+            f"extraConfig did not merge into [gateway], got {port!r}"
         )
   '';
 }

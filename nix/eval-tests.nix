@@ -143,4 +143,20 @@ in
       settings.gateway.web_dist_dir = "/srv/custom-dist";
     };
   };
+
+  # A raw `[gateway]` table in `extraConfig` merges with the bundle's
+  # injected `gateway.web_dist_dir` into a single valid table.
+  # Smoke-only: eval passes. Merged content
+  # (`port` + `web_dist_dir` coexist, extraConfig wins) is asserted in
+  # `nix/test.nix`, which can read the built output.
+  gatewayExtraConfigWithBundlePasses = assertPasses "gateway extraConfig with bundle" {
+    web = mkInstance {
+      webUiPackage = stubWebPackage;
+      extraConfig = ''
+        [gateway]
+        port = 42618
+      '';
+    };
+  };
+
 }
